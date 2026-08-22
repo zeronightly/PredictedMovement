@@ -132,6 +132,23 @@ private:
 	TObjectPtr<APredictedCharacter> PredCharacterOwner;
 
 public:
+	/** 
+	 * How to determine the terminal velocity for this character. 
+	 * Default: Get the terminal velocity from the current or default physics volume.
+	 * DirectSet: Set the terminal velocity directly on the character movement component.
+	 * @see GetTerminalVelocity()
+	 */
+	UPROPERTY(Category="Character Movement (General Settings)", EditAnywhere, BlueprintReadWrite)
+	EPredTerminalVelocityMode TerminalVelocityMode = EPredTerminalVelocityMode::Default;
+	
+	/** 
+	 * Direct Set Terminal Velocity.
+	 * @see GetTerminalVelocity()
+	 */
+	UPROPERTY(Category="Character Movement (General Settings)", EditAnywhere, BlueprintReadWrite, meta=(ClampMin="0", UIMin="0", ForceUnits="cm/s", EditCondition="TerminalVelocityMode == EPredTerminalVelocityMode::DirectSet"))
+	float TerminalVelocity = 4000.f;
+	
+public:
 	/** Max Acceleration (rate of change of velocity) */
 	UPROPERTY(Category="Character Movement (General Settings)", EditAnywhere, BlueprintReadWrite, meta=(ClampMin="0", UIMin="0"))
 	float MaxAccelerationRunning;
@@ -838,6 +855,10 @@ public:
 	
 	virtual float GetGravityZ() const override;
 	virtual FVector GetAirControl(float DeltaTime, float TickAirControl, const FVector& FallAcceleration) override;
+	
+	virtual float GetTerminalVelocity() const;
+	virtual FVector NewFallVelocity(const FVector& InitialVelocity, const FVector& Gravity, float DeltaTime) const override;
+	virtual void StartSwimming(FVector OldLocation, FVector OldVelocity, float timeTick, float remainingTime, int32 Iterations) override;
 
 public:	
 	virtual void CalcStamina(float DeltaTime);

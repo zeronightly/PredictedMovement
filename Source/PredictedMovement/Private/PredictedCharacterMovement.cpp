@@ -12,6 +12,7 @@
 #include "Engine/Engine.h"
 #endif
 
+#include "GameFramework/PhysicsVolume.h"
 #include "Modifier/ModifierTags.h"
 
 #include UE_INLINE_GENERATED_CPP_BY_NAME(PredictedCharacterMovement)
@@ -62,6 +63,12 @@ namespace PredMovementCVars
 		static IConsoleVariable* CVar = IConsoleManager::Get().FindConsoleVariable(TEXT("p.NetEnableListenServerSmoothing"));
 		return CVar;
 	}
+}
+
+namespace PredCharacterMovementConstants
+{
+	// MAGIC NUMBERS
+	const float SWIMBOBSPEED = -80.f;
 }
 
 UPredictedCharacterMovement::UPredictedCharacterMovement(const FObjectInitializer& ObjectInitializer)
@@ -631,6 +638,83 @@ FVector UPredictedCharacterMovement::GetAirControl(float DeltaTime, float TickAi
 	}
 	
 	return Super::GetAirControl(DeltaTime, TickAirControl, FallAcceleration);
+}
+
+float UPredictedCharacterMovement::GetTerminalVelocity() const
+{
+	switch (TerminalVelocityMode)
+	{
+	case EPredTerminalVelocityMode::Default:
+		break;
+	case EPredTerminalVelocityMode::DirectSet:
+		return TerminalVelocity;
+	}
+	
+	return GetPhysicsVolume()->TerminalVelocity;
+}
+
+FVector UPredictedCharacterMovement::NewFallVelocity(const FVector& InitialVelocity, const FVector& Gravity, float DeltaTime) const
+{
+	// Same as super - reintegration, but with GetTerminalVelocity()
+	
+	FVector Result = InitialVelocity;
+
+	if (DeltaTime > 0.f)
+	{
+		// Apply gravity.
+		Result += Gravity * DeltaTime;
+
+		// Don't exceed terminal velocity.
+		const float TerminalLimit = FMath::Abs(GetTerminalVelocity());
+		if (Result.SizeSquared() > FMath::Square(TerminalLimit))
+		{
+			const FVector GravityDir = Gravity.GetSafeNormal();
+			if ((Result | GravityDir) > TerminalLimit)
+			{
+				Result = FVector::PointPlaneProject(Result, FVector::ZeroVector, GravityDir) + GravityDir * TerminalLimit;
+			}
+		}
+	}
+
+	return Result;
+}
+
+void UPredictedCharacterMovement::StartSwimming(FVector OldLocation, FVector OldVelocity, float timeTick, float remainingTime, int32 Iterations)
+{
+	// Same as super - reintegration, but with GetTerminalVelocity()
+	
+	if (remainingTime < MIN_TICK_TIME || timeTick < MIN_TICK_TIME)
+	{
+		return;
+	}
+
+	if( !HasAnimRootMotion() && !CurrentRootMotion.HasOverrideVelocity() && !bJustTeleported )
+	{
+		Velocity = (UpdatedComponent->GetComponentLocation() - OldLocation)/timeTick; //actual average velocity
+		Velocity = 2.f*Velocity - OldVelocity; //end velocity has 2* accel of avg
+		Velocity = Velocity.GetClampedToMaxSize(GetTerminalVelocity());
+	}
+	const FVector End = FindWaterLine(UpdatedComponent->GetComponentLocation(), OldLocation);
+	float waterTime = 0.f;
+	if (End != UpdatedComponent->GetComponentLocation())
+	{	
+		const float ActualDist = (UpdatedComponent->GetComponentLocation() - OldLocation).Size();
+		if (ActualDist > UE_KINDA_SMALL_NUMBER)
+		{
+			waterTime = timeTick * (End - UpdatedComponent->GetComponentLocation()).Size() / ActualDist;
+			remainingTime += waterTime;
+		}
+		MoveUpdatedComponent(End - UpdatedComponent->GetComponentLocation(), UpdatedComponent->GetComponentQuat(), true);
+	}
+	const FVector::FReal GravityRelativeVelocityZ = GetGravitySpaceZ(Velocity);
+	if ( !HasAnimRootMotion() && !CurrentRootMotion.HasOverrideVelocity() && (GravityRelativeVelocityZ > 2.f*PredCharacterMovementConstants::SWIMBOBSPEED) && (GravityRelativeVelocityZ < 0.f)) //allow for falling out of water
+	{
+		SetGravitySpaceZ(Velocity, PredCharacterMovementConstants::SWIMBOBSPEED - ProjectToGravityFloor(Velocity).Size() * 0.7f); //smooth bobbing
+	}
+	if ( (remainingTime >= MIN_TICK_TIME) && (Iterations < MaxSimulationIterations) )
+	{
+		PhysSwimming(remainingTime, Iterations);
+	}
 }
 
 void UPredictedCharacterMovement::CalcStamina(float DeltaTime)

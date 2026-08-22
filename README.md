@@ -52,6 +52,11 @@ https://youtu.be/SHVm57AMruc
 
 # Changelog
 
+### 2.4.0
+* Add DirectSet support for TerminalVelocity
+  * By default this will change nothing for you, it is opt-in
+  * Tying it to the project settings never made sense
+
 ### 2.3.1
 * Fix engine bug affecting root motion and motion warping when standing on a translating base
   * Mesh is stale and not being updated, so always a frame behind, resulting in offsets in the root motion application

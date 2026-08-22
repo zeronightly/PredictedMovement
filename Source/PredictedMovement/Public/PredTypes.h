@@ -21,3 +21,10 @@ enum class EPredStance : uint8
 	Crouch,
 	Prone,
 };
+
+UENUM(BlueprintType)
+enum class EPredTerminalVelocityMode : uint8
+{
+	Default				UMETA(ToolTip="Get the terminal velocity from the current or default physics volume"),
+	DirectSet			UMETA(ToolTip="Set the terminal velocity directly on the character movement component"),
+};
